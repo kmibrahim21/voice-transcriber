@@ -1,29 +1,55 @@
-<script>
-document.getElementById("transBtn").onclick = async () => {
-  const formData = new FormData();
-  formData.append("audio", audioBlob, "recording.webm");
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Voice Transcriber</title>
+</head>
+<body>
+  <h1>🎤 Voice Recorder</h1>
+  <button id="startBtn">Start Recording</button>
+  <button id="stopBtn" disabled>Stop Recording</button>
+  <p id="status"></p>
+  <p><b>Transcript:</b> <span id="result"></span></p>
 
-  document.getElementById("status").innerText = "⏳ Uploading & Transcribing...";
+  <script>
+    let mediaRecorder, audioChunks = [];
 
-  try {
-    const res = await fetch("/api/transcribe", {
-      method: "POST",
-      body: formData,
-    });
+    document.getElementById("startBtn").onclick = async () => {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorder = new MediaRecorder(stream);
+      mediaRecorder.start();
+      audioChunks = [];
+      mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
 
-    const data = await res.json();
+      document.getElementById("status").innerText = "🎙️ Recording...";
+      document.getElementById("startBtn").disabled = true;
+      document.getElementById("stopBtn").disabled = false;
+    };
 
-    if (data.text) {
-      document.getElementById("transcript").innerText = "📄 " + data.text;
-      document.getElementById("status").innerText = "✅ Transcription done!";
-    } else {
-      document.getElementById("transcript").innerText = "❌ Failed: " + (data.error || "Unknown error");
-      document.getElementById("status").innerText = "⚠️ Error!";
-    }
-  } catch (err) {
-    console.error(err);
-    document.getElementById("transcript").innerText = "❌ Fetch failed!";
-    document.getElementById("status").innerText = "⚠️ Error!";
-  }
-};
-</script>
+    document.getElementById("stopBtn").onclick = async () => {
+      mediaRecorder.stop();
+      mediaRecorder.onstop = async () => {
+        const blob = new Blob(audioChunks, { type: "audio/webm" });
+        const reader = new FileReader();
+        reader.readAsDataURL(blob);
+        reader.onloadend = async () => {
+          document.getElementById("status").innerText = "⏳ Uploading...";
+
+          const res = await fetch("/api/transcribe", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ audio: reader.result })
+          });
+
+          const data = await res.json();
+          document.getElementById("status").innerText = "✅ Done";
+          document.getElementById("result").innerText = data.text || "Error";
+        };
+      };
+
+      document.getElementById("startBtn").disabled = false;
+      document.getElementById("stopBtn").disabled = true;
+    };
+  </script>
+</body>
+</html>
