@@ -1,49 +1,42 @@
-import express from "express";
-import multer from "multer";
-import { fileURLToPath } from "url";
-import path from "path";
 import fs from "fs";
+import path from "path";
+import multer from "multer";
 import OpenAI from "openai";
 
-// Express setup
-const app = express();
-const upload = multer({ dest: "uploads/" });
+export const config = {
+  api: {
+    bodyParser: false, // Multer handle করবে
+  },
+};
 
-app.use(express.json());
+const upload = multer({ dest: "/tmp" });
 
-// OpenAI init (API Key from env)
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Upload endpoint
-app.post("/transcribe", upload.single("audio"), async (req, res) => {
-  try {
-    const audioPath = req.file.path;
+export default function handler(req, res) {
+  if (req.method === "POST") {
+    upload.single("audio")(req, {}, async (err) => {
+      if (err) return res.status(500).json({ error: "Upload failed" });
 
-    const transcription = await openai.audio.transcriptions.create({
-      file: fs.createReadStream(audioPath),
-      model: "whisper-1",
+      try {
+        const audioPath = req.file.path;
+
+        const transcription = await openai.audio.transcriptions.create({
+          file: fs.createReadStream(audioPath),
+          model: "whisper-1",
+        });
+
+        fs.unlinkSync(audioPath); // টেম্প ফাইল ডিলিট
+
+        res.status(200).json({ text: transcription.text });
+      } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: "Transcription failed" });
+      }
     });
-
-    // Cleanup temp file
-    fs.unlinkSync(audioPath);
-
-    res.json({ text: transcription.text });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Transcription failed" });
+  } else {
+    res.status(405).json({ error: "Method not allowed" });
   }
-});
-
-// Root test
-app.get("/", (req, res) => {
-  res.send("✅ Voice Transcriber API running!");
-});
-
-// Listen (local test only)
-if (process.env.NODE_ENV !== "production") {
-  app.listen(3000, () => console.log("Server running on port 3000"));
 }
-
-export default app;
