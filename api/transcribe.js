@@ -1,42 +1,38 @@
 import fs from "fs";
 import path from "path";
-import multer from "multer";
+import { IncomingForm } from "formidable";
 import OpenAI from "openai";
 
 export const config = {
   api: {
-    bodyParser: false, // Multer handle করবে
+    bodyParser: false, // ❌ Body parser disable কারণ আমরা formidable ব্যবহার করবো
   },
 };
-
-const upload = multer({ dest: "/tmp" });
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-export default function handler(req, res) {
-  if (req.method === "POST") {
-    upload.single("audio")(req, {}, async (err) => {
-      if (err) return res.status(500).json({ error: "Upload failed" });
+export default async function handler(req, res) {
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  try {
+    const form = new IncomingForm({ uploadDir: "/tmp", keepExtensions: true });
+
+    form.parse(req, async (err, fields, files) => {
+      if (err) {
+        console.error("Form parse error:", err);
+        return res.status(500).json({ error: "File upload failed" });
+      }
+
+      const filePath = files.audio.filepath;
 
       try {
-        const audioPath = req.file.path;
-
         const transcription = await openai.audio.transcriptions.create({
-          file: fs.createReadStream(audioPath),
+          file: fs.createReadStream(filePath),
           model: "whisper-1",
         });
 
-        fs.unlinkSync(audioPath); // টেম্প ফাইল ডিলিট
-
-        res.status(200).json({ text: transcription.text });
-      } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: "Transcription failed" });
-      }
-    });
-  } else {
-    res.status(405).json({ error: "Method not allowed" });
-  }
-}
+        // টেম্প ফাইল মুছে ফেলবো
