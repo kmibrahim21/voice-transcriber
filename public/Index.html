@@ -1,0 +1,29 @@
+<script>
+document.getElementById("transBtn").onclick = async () => {
+  const formData = new FormData();
+  formData.append("audio", audioBlob, "recording.webm");
+
+  document.getElementById("status").innerText = "⏳ Uploading & Transcribing...";
+
+  try {
+    const res = await fetch("/api/transcribe", {
+      method: "POST",
+      body: formData,
+    });
+
+    const data = await res.json();
+
+    if (data.text) {
+      document.getElementById("transcript").innerText = "📄 " + data.text;
+      document.getElementById("status").innerText = "✅ Transcription done!";
+    } else {
+      document.getElementById("transcript").innerText = "❌ Failed: " + (data.error || "Unknown error");
+      document.getElementById("status").innerText = "⚠️ Error!";
+    }
+  } catch (err) {
+    console.error(err);
+    document.getElementById("transcript").innerText = "❌ Fetch failed!";
+    document.getElementById("status").innerText = "⚠️ Error!";
+  }
+};
+</script>
